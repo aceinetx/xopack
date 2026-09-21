@@ -1,11 +1,6 @@
 const std = @import("std");
 
-const c = @cImport({
-    @cInclude("stb_rect_pack.h");
-    @cInclude("stb_image.h");
-    @cInclude("stb_image_write.h");
-    @cInclude("stb_image_resize2.h");
-});
+const stb = @import("stb");
 
 pub const Input = struct {
     filenames: []const [:0]const u8,
@@ -90,7 +85,7 @@ pub const Packer = struct {
             var w: c_int = undefined;
             var h: c_int = undefined;
             var nr_channels: c_int = undefined;
-            const data = c.stbi_load(file.ptr, &w, &h, &nr_channels, 0);
+            const data = stb.stbi_load(file.ptr, &w, &h, &nr_channels, 0);
             if (data == null) return PackError.StbiImageLoadFailed;
             if (nr_channels != 3 and nr_channels != 4) return PackError.UnsupportedNrChannels;
             const w_unscaled = w;
@@ -103,15 +98,15 @@ pub const Packer = struct {
             // Resize the image
             const output = try allocator.alloc(u8, @intCast(w * h * nr_channels));
 
-            const pixel_type: c.stbir_pixel_layout = switch (nr_channels) {
-                3 => c.STBIR_RGB,
-                4 => c.STBIR_RGBA,
+            const pixel_type: stb.stbir_pixel_layout = switch (nr_channels) {
+                3 => stb.STBIR_RGB,
+                4 => stb.STBIR_RGBA,
                 else => unreachable,
             };
-            _ = c.stbir_resize_uint8_linear(data, w_unscaled, h_unscaled, w_unscaled * nr_channels, output.ptr, w, h, w * nr_channels, pixel_type);
+            _ = stb.stbir_resize_uint8_linear(data, w_unscaled, h_unscaled, w_unscaled * nr_channels, output.ptr, w, h, w * nr_channels, pixel_type);
 
             // Free the old image
-            c.stbi_image_free(data);
+            stb.stbi_image_free(data);
 
             try files.append(.{
                 .data = output,
@@ -130,7 +125,7 @@ pub const Packer = struct {
         }
 
         // Pack rectangles
-        var rects: std.array_list.Managed(c.stbrp_rect) = .init(allocator);
+        var rects: std.array_list.Managed(stb.stbrp_rect) = .init(allocator);
         defer rects.deinit();
 
         for (0.., files.items) |i, *file| {
@@ -141,12 +136,12 @@ pub const Packer = struct {
             });
         }
 
-        var ctx: c.stbrp_context = undefined;
-        var nodes: [256]c.stbrp_node = undefined;
-        c.stbrp_init_target(&ctx, input.width, input.height, &nodes, nodes.len);
+        var ctx: stb.stbrp_context = undefined;
+        var nodes: [256]stb.stbrp_node = undefined;
+        stb.stbrp_init_target(&ctx, input.width, input.height, &nodes, nodes.len);
 
         const rect_count: c_int = @intCast(rects.items.len);
-        if (c.stbrp_pack_rects(&ctx, rects.items.ptr, rect_count) == 0)
+        if (stb.stbrp_pack_rects(&ctx, rects.items.ptr, rect_count) == 0)
             return PackError.StbrpPartiallyPacked;
 
         for (rects.items) |*rect| {
@@ -205,7 +200,7 @@ pub const Packer = struct {
             }
         }
 
-        if (c.stbi_write_png(input.output, input.width, input.height, 4, data.ptr, input.width * 4) == 0)
+        if (stb.stbi_write_png(input.output, input.width, input.height, 4, data.ptr, input.width * 4) == 0)
             return PackError.StbiOutputWriteFailed;
         std.debug.print("[{s}] done\n", .{input.output});
     }
