@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     const stb_mod = stb.createModule();
 
     const exe = b.addExecutable(.{
-        .name = "prack",
+        .name = "xopack",
         .root_module = b.createModule(.{
             .link_libc = true,
             .target = target,
