@@ -20,14 +20,6 @@ pub const Packer = struct {
         scale: f32 = 1.0,
     };
 
-    const FileData = struct {
-        data: []u8,
-        name: [:0]const u8,
-        width: c_int,
-        height: c_int,
-        nr_channels: c_int,
-    };
-
     const AddInputError = error{InputAlreadyTaken};
 
     allocator: std.mem.Allocator,
@@ -68,6 +60,14 @@ pub const Packer = struct {
     ///
     /// Threadsafe.
     fn packInput(self: *@This(), io: std.Io, input: *const Input, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) !void {
+        const FileData = struct {
+            data: []u8,
+            name: [:0]const u8,
+            width: c_int,
+            height: c_int,
+            nr_channels: c_int,
+        };
+
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         var allocator = arena.allocator();
         defer arena.deinit();
