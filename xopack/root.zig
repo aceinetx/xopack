@@ -2,30 +2,30 @@ const std = @import("std");
 
 const stb = @import("stb");
 
-pub const Input = struct {
-    filenames: []const [:0]const u8,
-    output: [:0]const u8,
-    width: i32 = 1024,
-    height: i32 = 1024,
-    scale: f32 = 1.0,
-};
-
-pub const EmitterFunc = *const fn (userdata: *anyopaque, io: std.Io, filename: [:0]const u8, x: i32, y: i32, width: i32, height: i32) void;
-
-const FileData = struct {
-    data: []u8,
-    name: [:0]const u8,
-    width: c_int,
-    height: c_int,
-    nr_channels: c_int,
-};
-
 pub const Packer = struct {
+    pub const EmitterFunc = *const fn (userdata: *anyopaque, io: std.Io, filename: [:0]const u8, x: i32, y: i32, width: i32, height: i32) void;
+
     const PackError = error{
         StbiImageLoadFailed,
         StbrpPartiallyPacked,
         StbiOutputWriteFailed,
         UnsupportedNrChannels,
+    };
+
+    pub const Input = struct {
+        filenames: []const [:0]const u8,
+        output: [:0]const u8,
+        width: i32 = 1024,
+        height: i32 = 1024,
+        scale: f32 = 1.0,
+    };
+
+    const FileData = struct {
+        data: []u8,
+        name: [:0]const u8,
+        width: c_int,
+        height: c_int,
+        nr_channels: c_int,
     };
 
     const AddInputError = error{InputAlreadyTaken};

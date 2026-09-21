@@ -4,32 +4,47 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // --------------------------------------------------------------
+
     const stb = b.addTranslateC(.{
         .optimize = optimize,
         .target = target,
         .link_libc = true,
-        .root_source_file = b.path("src/stb.h"),
+        .root_source_file = b.path("xopack/stb.h"),
     });
     stb.addIncludePath(b.path("vendor/stb"));
 
     const stb_mod = stb.createModule();
 
+    const xopack = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .root_source_file = b.path("xopack/root.zig"),
+        .imports = &.{
+            .{ .name = "stb", .module = stb_mod },
+        },
+    });
+    xopack.addCSourceFile(.{ .file = b.path("xopack/stb.c") });
+    xopack.addIncludePath(b.path("vendor/stb"));
+
+    // --------------------------------------------------------------
+
     const exe = b.addExecutable(.{
         .name = "xopack",
         .root_module = b.createModule(.{
-            .link_libc = true,
             .target = target,
             .optimize = optimize,
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/root.zig"),
             .imports = &.{
-                .{ .name = "stb", .module = stb_mod },
+                .{ .name = "xopack", .module = xopack },
             },
         }),
     });
-    exe.root_module.addCSourceFile(.{ .file = b.path("src/stb.c") });
-    exe.root_module.addIncludePath(b.path("vendor/stb"));
 
     b.installArtifact(exe);
+
+    // --------------------------------------------------------------
 
     const run_step = b.step("run", "Run");
     const run_cmd = b.addRunArtifact(exe);

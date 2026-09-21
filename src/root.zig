@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const Packer = @import("packer.zig").Packer;
+const Packer = @import("xopack").Packer;
 
 var i: usize = 0;
 
