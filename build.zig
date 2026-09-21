@@ -15,6 +15,8 @@ pub fn build(b: *std.Build) void {
     stb.addIncludePath(b.path("vendor/stb"));
 
     const stb_mod = stb.createModule();
+    stb_mod.addCSourceFile(.{ .file = b.path("xopack/stb.c") });
+    stb_mod.addIncludePath(b.path("vendor/stb"));
 
     const xopack = b.createModule(.{
         .target = target,
@@ -25,8 +27,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "stb", .module = stb_mod },
         },
     });
-    xopack.addCSourceFile(.{ .file = b.path("xopack/stb.c") });
-    xopack.addIncludePath(b.path("vendor/stb"));
 
     // --------------------------------------------------------------
 
