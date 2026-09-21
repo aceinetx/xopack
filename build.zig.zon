@@ -3,5 +3,5 @@
     .version = "0.0.1",
     .minimum_zig_version = "0.16.0",
     .paths = .{""},
-    .fingerprint = 0x23635e668fa55a3a,
+    .fingerprint = 0xfb4b4fac29a4be2a,
 }
