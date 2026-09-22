@@ -3,6 +3,8 @@ const std = @import("std");
 const stb = @import("stb");
 
 pub const Packer = struct {
+    const Self = @This();
+
     pub const EmitterFunc = *const fn (userdata: *anyopaque, io: std.Io, filename: [:0]const u8, x: i32, y: i32, width: i32, height: i32) void;
 
     const PackError = error{
@@ -26,7 +28,7 @@ pub const Packer = struct {
     inputs: std.array_list.Managed(Input),
     emitter_mutex: std.Io.Mutex,
 
-    pub fn init(allocator: std.mem.Allocator) @This() {
+    pub fn init(allocator: std.mem.Allocator) Self {
         return .{
             .allocator = allocator,
             .inputs = .init(allocator),
@@ -34,7 +36,7 @@ pub const Packer = struct {
         };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *Self) void {
         self.inputs.deinit();
     }
 
@@ -44,7 +46,7 @@ pub const Packer = struct {
     ///
     /// Not threadsafe.
     pub fn addInput(
-        self: *@This(),
+        self: *Self,
         input: Input,
     ) !void {
         // Check if an output filename is already taken
@@ -59,7 +61,7 @@ pub const Packer = struct {
     /// Packs an input.
     ///
     /// Threadsafe.
-    fn packInput(self: *@This(), io: std.Io, input: *const Input, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) !void {
+    fn packInput(self: *Self, io: std.Io, input: *const Input, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) !void {
         const FileData = struct {
             data: []u8,
             name: [:0]const u8,
@@ -206,7 +208,7 @@ pub const Packer = struct {
     }
 
     /// Worker for packInput, handles errors.
-    fn packInputWorker(self: *@This(), io: std.Io, input: *const Input, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) void {
+    fn packInputWorker(self: *Self, io: std.Io, input: *const Input, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) void {
         self.packInput(io, input, emitter, emitter_userdata) catch |err| {
             std.debug.print("[{s}] error: {}\n", .{
                 input.output,
@@ -221,12 +223,12 @@ pub const Packer = struct {
     /// After packing removes all inputs.
     ///
     /// Not threadsafe.
-    pub fn packWithEmitter(self: *@This(), io: std.Io, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) !void {
+    pub fn packWithEmitter(self: *Self, io: std.Io, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) !void {
         var g = std.Io.Group.init;
         errdefer g.cancel(io);
 
         for (self.inputs.items) |*input| {
-            g.async(io, @This().packInputWorker, .{ self, io, input, emitter, emitter_userdata });
+            g.async(io, Self.packInputWorker, .{ self, io, input, emitter, emitter_userdata });
         }
         try g.await(io);
         self.inputs.clearRetainingCapacity();
@@ -236,7 +238,7 @@ pub const Packer = struct {
     /// After packing removes all inputs.
     ///
     /// Not threadsafe.
-    pub fn pack(self: *@This(), io: std.Io) !void {
+    pub fn pack(self: *Self, io: std.Io) !void {
         try self.packWithEmitter(io, null, undefined);
     }
 };
