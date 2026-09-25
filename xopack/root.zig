@@ -61,7 +61,14 @@ pub const Packer = struct {
     /// Packs an input.
     ///
     /// Threadsafe.
-    fn packInput(self: *Self, io: std.Io, input: *const Input, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) !void {
+    fn packInput(
+        self: *Self,
+        io: std.Io,
+        input: *const Input,
+        root_progress: std.Progress.Node,
+        emitter: ?EmitterFunc,
+        emitter_userdata: *anyopaque,
+    ) !void {
         const FileData = struct {
             data: []u8,
             name: [:0]const u8,
@@ -70,11 +77,17 @@ pub const Packer = struct {
             nr_channels: c_int,
         };
 
+        const do_print = false;
+        var progress = root_progress.start(input.output, input.filenames.len * 3 + 1);
+        defer progress.end();
+
+        // ----------------------------------------------------------
+
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         var allocator = arena.allocator();
         defer arena.deinit();
 
-        var files: std.array_list.Managed(FileData) = .init(allocator);
+        var files: std.array_list.Managed(FileData) = try .initCapacity(allocator, input.filenames.len);
         defer {
             for (files.items) |file| {
                 allocator.free(file.data);
@@ -82,7 +95,9 @@ pub const Packer = struct {
             files.deinit();
         }
 
+        // ----------------------------------------------------------
         // Load all the files
+
         for (input.filenames) |file| {
             var w: c_int = undefined;
             var h: c_int = undefined;
@@ -117,17 +132,22 @@ pub const Packer = struct {
                 .height = h,
                 .nr_channels = nr_channels,
             });
-            std.debug.print("[{s}] loaded: {s} (w = {}, h = {}, nr_channels = {})\n", .{
-                input.output,
-                file,
-                w,
-                h,
-                nr_channels,
-            });
+
+            if (do_print)
+                std.debug.print("[{s}] loaded: {s} (w = {}, h = {}, nr_channels = {})\n", .{
+                    input.output,
+                    file,
+                    w,
+                    h,
+                    nr_channels,
+                });
+            progress.completeOne();
         }
 
+        // ----------------------------------------------------------
         // Pack rectangles
-        var rects: std.array_list.Managed(stb.stbrp_rect) = .init(allocator);
+
+        var rects: std.array_list.Managed(stb.stbrp_rect) = try .initCapacity(allocator, files.items.len);
         defer rects.deinit();
 
         for (0.., files.items) |i, *file| {
@@ -147,25 +167,30 @@ pub const Packer = struct {
             return PackError.StbrpPartiallyPacked;
 
         for (rects.items) |*rect| {
-            std.debug.print("[{s}] packed: {s} ({} {} {})\n", .{
-                input.output,
-                files.items[@intCast(rect.id)].name,
-                rect.x,
-                rect.y,
-                rect.was_packed,
-            });
+            if (do_print)
+                std.debug.print("[{s}] packed: {s} ({} {} {})\n", .{
+                    input.output,
+                    files.items[@intCast(rect.id)].name,
+                    rect.x,
+                    rect.y,
+                    rect.was_packed,
+                });
             std.debug.assert(rect.was_packed == 1);
+
+            progress.completeOne();
         }
 
+        // ----------------------------------------------------------
         // Write the final spritesheet
+
         const data = try allocator.alloc(u8, @intCast(input.width * input.height * 4));
-        defer allocator.free(data);
 
         @memset(data, 0);
 
         for (rects.items) |*rect| {
             const file = &files.items[@intCast(rect.id)];
-            std.debug.print("[{s}] writing: {s}\n", .{ input.output, file.name });
+            if (do_print)
+                std.debug.print("[{s}] writing: {s}\n", .{ input.output, file.name });
 
             // Call emitter if there is one
             if (emitter) |f| {
@@ -200,16 +225,29 @@ pub const Packer = struct {
                     else => unreachable,
                 }
             }
+
+            progress.completeOne();
         }
 
         if (stb.stbi_write_png(input.output, input.width, input.height, 4, data.ptr, input.width * 4) == 0)
             return PackError.StbiOutputWriteFailed;
-        std.debug.print("[{s}] done\n", .{input.output});
+
+        progress.completeOne();
+
+        if (do_print)
+            std.debug.print("[{s}] done\n", .{input.output});
     }
 
     /// Worker for packInput, handles errors.
-    fn packInputWorker(self: *Self, io: std.Io, input: *const Input, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) void {
-        self.packInput(io, input, emitter, emitter_userdata) catch |err| {
+    fn packInputWorker(
+        self: *Self,
+        io: std.Io,
+        input: *const Input,
+        root_progress: std.Progress.Node,
+        emitter: ?EmitterFunc,
+        emitter_userdata: *anyopaque,
+    ) void {
+        self.packInput(io, input, root_progress, emitter, emitter_userdata) catch |err| {
             std.debug.print("[{s}] error: {}\n", .{
                 input.output,
                 err,
@@ -224,11 +262,17 @@ pub const Packer = struct {
     ///
     /// Not threadsafe.
     pub fn packWithEmitter(self: *Self, io: std.Io, emitter: ?EmitterFunc, emitter_userdata: *anyopaque) !void {
+        const root_progress = std.Progress.start(io, .{
+            .root_name = "packing inputs",
+            .estimated_total_items = self.inputs.items.len,
+        });
+        defer root_progress.end();
+
         var g = std.Io.Group.init;
         errdefer g.cancel(io);
 
         for (self.inputs.items) |*input| {
-            g.async(io, Self.packInputWorker, .{ self, io, input, emitter, emitter_userdata });
+            g.async(io, Self.packInputWorker, .{ self, io, input, root_progress, emitter, emitter_userdata });
         }
         try g.await(io);
         self.inputs.clearRetainingCapacity();
