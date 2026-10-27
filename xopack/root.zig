@@ -268,13 +268,17 @@ pub const Packer = struct {
         });
         defer root_progress.end();
 
-        var g = std.Io.Group.init;
-        errdefer g.cancel(io);
+        var threads = try self.allocator.alloc(std.Thread, self.inputs.items.len);
+        defer self.allocator.free(threads);
 
-        for (self.inputs.items) |*input| {
-            g.async(io, Self.packInputWorker, .{ self, io, input, root_progress, emitter, emitter_userdata });
+        for (0.., self.inputs.items) |i, *input| {
+            threads[i] = try std.Thread.spawn(.{}, Self.packInputWorker, .{ self, io, input, root_progress, emitter, emitter_userdata });
         }
-        try g.await(io);
+
+        for (threads) |*thread| {
+            thread.join();
+        }
+
         self.inputs.clearRetainingCapacity();
     }
 
